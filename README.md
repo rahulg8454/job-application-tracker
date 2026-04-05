@@ -3,7 +3,7 @@
 A full-stack web application to track job applications and their current status.
 
 ## Tech Stack
-- Frontend: React, TypeScript, Tailwind CSS
+- Frontend: React, TypeScript, Tailwind CSS 
 - Backend & Database: Supabase
 - Authentication: Supabase Auth 
 - Tools: Git, GitHub
