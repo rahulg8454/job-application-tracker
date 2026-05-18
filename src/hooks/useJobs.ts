@@ -1,5 +1,4 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
@@ -27,36 +26,68 @@ export interface UpdateJobInput extends Partial<CreateJobInput> {
   id: string;
 }
 
+interface ApiJob {
+  id: number;
+  user_id: number;
+  company: string;
+  role: string;
+  status: JobStatus;
+  location?: string;
+  notes?: string;
+  created_at: string;
+}
+
+function mapApiJobToJob(apiJob: ApiJob): Job {
+  return {
+    id: String(apiJob.id),
+    user_id: String(apiJob.user_id),
+    company_name: apiJob.company,
+    role: apiJob.role,
+    application_date: apiJob.created_at.split('T')[0],
+    status: apiJob.status,
+    created_at: apiJob.created_at,
+    updated_at: apiJob.created_at,
+  };
+}
+
 export function useJobs() {
-  const { user } = useAuth();
+  const { user, getToken } = useAuth();
   const queryClient = useQueryClient();
 
   const jobsQuery = useQuery({
     queryKey: ['jobs', user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('jobs')
-        .select('*')
-        .order('application_date', { ascending: false });
-      
-      if (error) throw error;
-      return data as Job[];
+      const token = getToken();
+      const res = await fetch('/api/jobs', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Failed to fetch jobs');
+      const data: ApiJob[] = await res.json();
+      return data.map(mapApiJobToJob);
     },
     enabled: !!user,
   });
 
   const createJob = useMutation({
     mutationFn: async (input: CreateJobInput) => {
-      if (!user) throw new Error('Not authenticated');
-      
-      const { data, error } = await supabase
-        .from('jobs')
-        .insert([{ ...input, user_id: user.id }])
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as Job;
+      const token = getToken();
+      const res = await fetch('/api/jobs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          company: input.company_name,
+          role: input.role,
+          status: input.status,
+          location: '',
+          notes: '',
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to create job');
+      const data: ApiJob = await res.json();
+      return mapApiJobToJob(data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
@@ -69,15 +100,24 @@ export function useJobs() {
 
   const updateJob = useMutation({
     mutationFn: async ({ id, ...input }: UpdateJobInput) => {
-      const { data, error } = await supabase
-        .from('jobs')
-        .update(input)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as Job;
+      const token = getToken();
+      const res = await fetch(`/api/jobs?id=${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          company: (input as CreateJobInput).company_name,
+          role: input.role,
+          status: input.status,
+          location: '',
+          notes: '',
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to update job');
+      const data: ApiJob = await res.json();
+      return mapApiJobToJob(data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
@@ -90,12 +130,12 @@ export function useJobs() {
 
   const deleteJob = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('jobs')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      const token = getToken();
+      const res = await fetch(`/api/jobs?id=${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Failed to delete job');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
